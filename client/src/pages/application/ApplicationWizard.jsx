@@ -126,8 +126,16 @@ const ApplicationWizard = () => {
   // Save to localStorage whenever form changes, unless submitted
   useEffect(() => {
     if (!submitResult) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(formValues));
+      const saveDraftTimeout = window.setTimeout(() => {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(formValues));
+      }, 200);
+
+      return () => {
+        window.clearTimeout(saveDraftTimeout);
+      };
     }
+
+    return undefined;
   }, [formValues, submitResult]);
 
   const validateStep = async () => {
@@ -374,7 +382,7 @@ const ApplicationWizard = () => {
                 <div>
                   <label className="block text-sm font-bold text-white/80 mb-2">GitHub Username *</label>
                   <div className="relative">
-                    <span className="absolute left-4 top-3 text-white/30 font-mono">github.com/</span>
+                    <span className="pointer-events-none select-none absolute left-4 top-3 text-white/30 font-mono">github.com/</span>
                     <input {...register('githubUsername')} className="w-full bg-black/30 border border-white/10 rounded-xl pl-[104px] pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-brand-mint focus:ring-1 focus:ring-brand-mint transition-all font-mono" placeholder="username" />
                   </div>
                   {errors.githubUsername && <p className="text-red-400 text-xs mt-1 font-sans">{errors.githubUsername.message}</p>}
