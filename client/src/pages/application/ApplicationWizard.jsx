@@ -27,6 +27,20 @@ const statusPillStyles = {
 const TERMS_OF_SERVICE_DOC_URL = '/docs/03_terms_of_service.pdf';
 const CODE_OF_CONDUCT_DOC_URL = '/docs/01_code_of_conduct.pdf';
 const INSTRUCTOR_FRAMEWORK_DOC_URL = '/docs/02_instructor_framework.pdf';
+const DOCUMENTS = {
+  terms: {
+    title: 'Terms of Service',
+    url: TERMS_OF_SERVICE_DOC_URL,
+  },
+  conduct: {
+    title: 'Code of Conduct',
+    url: CODE_OF_CONDUCT_DOC_URL,
+  },
+  framework: {
+    title: 'Instructor Framework',
+    url: INSTRUCTOR_FRAMEWORK_DOC_URL,
+  },
+};
 
 const countWords = (value = '') => value.trim().split(/\s+/).filter(Boolean).length;
 
@@ -61,6 +75,7 @@ const ApplicationWizard = () => {
   const [submitResult, setSubmitResult] = useState(null);
   const [paymentNoticeState, setPaymentNoticeState] = useState('idle');
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+  const [activeDocument, setActiveDocument] = useState(null);
   const [statusQueryId, setStatusQueryId] = useState('');
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [statusResult, setStatusResult] = useState(null);
@@ -109,19 +124,37 @@ const ApplicationWizard = () => {
   }, [initialTrack, reset]);
 
   useEffect(() => {
-    if (!isTermsModalOpen) {
+    if (!isTermsModalOpen && !activeDocument) {
       return undefined;
     }
 
     const onEsc = (event) => {
       if (event.key === 'Escape') {
+        if (activeDocument) {
+          setActiveDocument(null);
+          return;
+        }
+
         setIsTermsModalOpen(false);
       }
     };
 
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
-  }, [isTermsModalOpen]);
+  }, [isTermsModalOpen, activeDocument]);
+
+  useEffect(() => {
+    if (!activeDocument) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [activeDocument]);
 
   // Save to localStorage whenever form changes, unless submitted
   useEffect(() => {
@@ -219,6 +252,14 @@ const ApplicationWizard = () => {
     } finally {
       setIsCheckingStatus(false);
     }
+  };
+
+  const openDocument = (documentConfig) => {
+    if (!documentConfig) {
+      return;
+    }
+
+    setActiveDocument(documentConfig);
   };
 
   if (submitResult) {
@@ -548,14 +589,22 @@ const ApplicationWizard = () => {
                       <AlertCircle className="w-4 h-4" />
                       View Terms & Code of Conduct
                     </button>
-                    <a href={TERMS_OF_SERVICE_DOC_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/70 hover:text-white underline underline-offset-4">
+                    <button
+                      type="button"
+                      onClick={() => openDocument(DOCUMENTS.terms)}
+                      className="inline-flex items-center gap-1 text-white/70 hover:text-white underline underline-offset-4"
+                    >
                       Terms Document
                       <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                    <a href={CODE_OF_CONDUCT_DOC_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/70 hover:text-white underline underline-offset-4">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openDocument(DOCUMENTS.conduct)}
+                      className="inline-flex items-center gap-1 text-white/70 hover:text-white underline underline-offset-4"
+                    >
                       Code of Conduct
                       <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -686,19 +735,71 @@ const ApplicationWizard = () => {
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a href={TERMS_OF_SERVICE_DOC_URL} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => openDocument(DOCUMENTS.terms)}
+                className="px-4 py-2 rounded-lg border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 inline-flex items-center gap-1.5"
+              >
                 Open Terms Document
                 <ExternalLink className="w-4 h-4" />
-              </a>
-              <a href={CODE_OF_CONDUCT_DOC_URL} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg border border-brand-mint/40 text-brand-mint hover:bg-brand-mint/10 inline-flex items-center gap-1.5">
+              </button>
+              <button
+                type="button"
+                onClick={() => openDocument(DOCUMENTS.conduct)}
+                className="px-4 py-2 rounded-lg border border-brand-mint/40 text-brand-mint hover:bg-brand-mint/10 inline-flex items-center gap-1.5"
+              >
                 Open Code of Conduct
                 <ExternalLink className="w-4 h-4" />
-              </a>
-              <a href={INSTRUCTOR_FRAMEWORK_DOC_URL} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg border border-white/30 text-white/80 hover:bg-white/10 inline-flex items-center gap-1.5">
+              </button>
+              <button
+                type="button"
+                onClick={() => openDocument(DOCUMENTS.framework)}
+                className="px-4 py-2 rounded-lg border border-white/30 text-white/80 hover:bg-white/10 inline-flex items-center gap-1.5"
+              >
                 Open Instructor Framework
                 <ExternalLink className="w-4 h-4" />
-              </a>
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {activeDocument && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center px-3 sm:px-6 py-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setActiveDocument(null)} />
+
+          <div className="relative z-10 w-full max-w-6xl rounded-2xl border border-white/15 bg-brand-dark shadow-2xl overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+              <div>
+                <p className="text-sm text-white/60">Viewing document</p>
+                <h4 className="text-base sm:text-lg font-bold text-white">{activeDocument.title}</h4>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={activeDocument.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-lg border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 inline-flex items-center gap-1.5 text-sm"
+                >
+                  Open in new tab
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setActiveDocument(null)}
+                  className="px-3 py-2 rounded-lg border border-white/20 text-white/80 hover:text-white hover:bg-white/10 inline-flex items-center gap-1.5 text-sm"
+                >
+                  Back to application
+                </button>
+              </div>
+            </div>
+
+            <iframe
+              title={activeDocument.title}
+              src={activeDocument.url}
+              className="w-full h-[72vh] bg-black"
+            />
           </div>
         </div>
       )}
