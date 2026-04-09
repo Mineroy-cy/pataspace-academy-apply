@@ -4,9 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { applicationSchema, defaultValues } from './schema';
-import { getApiErrorMessage, notifyPaymentSent, submitApplication } from '../../api/client';
+import { checkApplicationStatus, getApiErrorMessage, notifyPaymentSent, submitApplication } from '../../api/client';
 import toast from 'react-hot-toast';
-import { CheckCircle2, ChevronRight, ChevronLeft, User, CheckSquare, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, ChevronLeft, ExternalLink, Search, User, CheckSquare, Sparkles, X } from 'lucide-react';
 
 const steps = [
   { id: 1, name: 'Personal Info' },
@@ -17,6 +17,16 @@ const steps = [
 
 const LOCAL_STORAGE_KEY = 'pataspace_application_draft';
 const trackQueryValues = new Set(['backend', 'frontend', 'both']);
+const statusPillStyles = {
+  pending_payment: 'bg-brand-gold/15 text-brand-gold border-brand-gold/30',
+  payment_received: 'bg-brand-teal/15 text-brand-teal border-brand-teal/30',
+  orientation_scheduled: 'bg-brand-mint/15 text-brand-mint border-brand-mint/30',
+  enrolled: 'bg-brand-mint/15 text-brand-mint border-brand-mint/30',
+  inactive: 'bg-white/10 text-white/70 border-white/20',
+};
+const TERMS_OF_SERVICE_DOC_URL = '/docs/03_terms_of_service.pdf';
+const CODE_OF_CONDUCT_DOC_URL = '/docs/01_code_of_conduct.pdf';
+const INSTRUCTOR_FRAMEWORK_DOC_URL = '/docs/02_instructor_framework.pdf';
 
 const countWords = (value = '') => value.trim().split(/\s+/).filter(Boolean).length;
 
@@ -50,6 +60,10 @@ const ApplicationWizard = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState(null);
   const [paymentNoticeState, setPaymentNoticeState] = useState('idle');
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+  const [statusQueryId, setStatusQueryId] = useState('');
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [statusResult, setStatusResult] = useState(null);
   const [searchParams] = useSearchParams();
 
   const initialTrackParam = searchParams.get('track');
@@ -93,6 +107,21 @@ const ApplicationWizard = () => {
       selectedTrack: initialTrack || defaultValues.selectedTrack,
     });
   }, [initialTrack, reset]);
+
+  useEffect(() => {
+    if (!isTermsModalOpen) {
+      return undefined;
+    }
+
+    const onEsc = (event) => {
+      if (event.key === 'Escape') {
+        setIsTermsModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [isTermsModalOpen]);
 
   // Save to localStorage whenever form changes, unless submitted
   useEffect(() => {
@@ -159,6 +188,28 @@ const ApplicationWizard = () => {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Unable to record payment notification.'));
       setPaymentNoticeState('idle');
+    }
+  };
+
+  const handleStatusLookup = async () => {
+    const trimmedId = statusQueryId.trim();
+
+    if (!trimmedId) {
+      toast.error('Enter your application ID to check status.');
+      return;
+    }
+
+    setIsCheckingStatus(true);
+    setStatusResult(null);
+
+    try {
+      const result = await checkApplicationStatus(trimmedId);
+      setStatusResult(result);
+      toast.success('Application status loaded.');
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Could not fetch application status.'));
+    } finally {
+      setIsCheckingStatus(false);
     }
   };
 
@@ -229,6 +280,46 @@ const ApplicationWizard = () => {
       <Helmet>
         <title>Apply to Cohort 1 | PataSpace Academy</title>
       </Helmet>
+
+      <section className="mb-8 rounded-2xl border border-brand-teal/30 bg-brand-teal/10 p-5">
+        <h3 className="text-base font-heading font-bold text-white mb-3">Check My Application Status</h3>
+        <p className="text-white/65 text-sm mb-4">Use your application ID to quickly check where your application is in the onboarding pipeline.</p>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            value={statusQueryId}
+            onChange={(event) => setStatusQueryId(event.target.value)}
+            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-brand-teal"
+            placeholder="Enter application ID (UUID)"
+            aria-label="Application ID"
+          />
+          <button
+            type="button"
+            onClick={handleStatusLookup}
+            disabled={isCheckingStatus}
+            className="px-5 py-3 rounded-xl bg-brand-teal text-white font-bold hover:bg-brand-teal/85 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+          >
+            <Search className="w-4 h-4" />
+            {isCheckingStatus ? 'Checking...' : 'Check Status'}
+          </button>
+        </div>
+
+        {statusResult && (
+          <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4">
+            <p className="text-white/60 text-xs mb-2">Application ID</p>
+            <p className="text-white text-sm break-all mb-3">{statusResult.applicationId}</p>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-white/60 text-xs">Current Status</span>
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${statusPillStyles[statusResult.status] || 'bg-white/10 text-white/70 border-white/20'}`}>
+                {statusResult.status?.replace(/_/g, ' ') || 'unknown'}
+              </span>
+            </div>
+
+            <p className="text-white/55 text-xs mt-3">Updated: {statusResult.updatedAt ? new Date(statusResult.updatedAt).toLocaleString() : 'N/A'}</p>
+          </div>
+        )}
+      </section>
 
       {/* Progress Bar */}
       <div className="mb-10">
@@ -426,7 +517,7 @@ const ApplicationWizard = () => {
                   { id: 'agreedToAttendance', label: 'I commit to attending ≥75% of sessions and communicating absences in advance.' },
                   { id: 'agreedToGitHub', label: 'I understand that all assignments are submitted via GitHub Pull Requests.' },
                   { id: 'agreedToFees', label: 'I understand that the KES 500 commitment fee is non-refundable and monthly fees apply.' },
-                  { id: 'agreedToTerms', label: 'I have read and agree to the PataSpace Academy Terms of Service.' }
+                  { id: 'agreedToTerms', label: 'I have read and agree to the PataSpace Academy Terms of Service and Code of Conduct.' }
                 ].map(checkbox => (
                   <label key={checkbox.id} className="flex items-start gap-4 cursor-pointer group">
                     <div className="pt-1">
@@ -438,6 +529,27 @@ const ApplicationWizard = () => {
                     </div>
                   </label>
                 ))}
+
+                <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setIsTermsModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-brand-teal/40 px-3 py-2 text-brand-teal hover:bg-brand-teal/10"
+                    >
+                      <AlertCircle className="w-4 h-4" />
+                      View Terms & Code of Conduct
+                    </button>
+                    <a href={TERMS_OF_SERVICE_DOC_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/70 hover:text-white underline underline-offset-4">
+                      Terms Document
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <a href={CODE_OF_CONDUCT_DOC_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/70 hover:text-white underline underline-offset-4">
+                      Code of Conduct
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -525,6 +637,63 @@ const ApplicationWizard = () => {
 
         </form>
       </div>
+
+      {isTermsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={() => setIsTermsModalOpen(false)} />
+
+          <div className="relative z-10 w-full max-w-2xl max-h-[85vh] overflow-auto rounded-2xl border border-white/15 bg-brand-dark p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-2xl font-heading font-bold text-white">Terms of Service & Code of Conduct</h3>
+                <p className="text-white/60 text-sm mt-1">Summary for application consent. Full legal copy remains in your source documents.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTermsModalOpen(false)}
+                className="rounded-lg border border-white/20 p-2 text-white/70 hover:text-white hover:bg-white/10"
+                aria-label="Close terms modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm text-white/80">
+              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                <p className="font-bold text-white mb-1">1. Equipment and participation</p>
+                <p>A laptop/desktop and reliable internet are required. Students commit to attendance and timely communication when unavailable.</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                <p className="font-bold text-white mb-1">2. Engineering workflow requirements</p>
+                <p>All tasks are submitted through GitHub Pull Requests. Progress is tied to mentor review cycles and Boss Battle approvals.</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                <p className="font-bold text-white mb-1">3. Fees and refund policy</p>
+                <p>The KES 500 commitment fee is non-refundable and applied to month 1. Monthly tuition deadlines and late-fee rules still apply.</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                <p className="font-bold text-white mb-1">4. Conduct expectations</p>
+                <p>Professional communication, respect in reviews and sessions, and academic integrity are mandatory for continued enrollment.</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <a href={TERMS_OF_SERVICE_DOC_URL} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 inline-flex items-center gap-1.5">
+                Open Terms Document
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <a href={CODE_OF_CONDUCT_DOC_URL} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg border border-brand-mint/40 text-brand-mint hover:bg-brand-mint/10 inline-flex items-center gap-1.5">
+                Open Code of Conduct
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <a href={INSTRUCTOR_FRAMEWORK_DOC_URL} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg border border-white/30 text-white/80 hover:bg-white/10 inline-flex items-center gap-1.5">
+                Open Instructor Framework
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
